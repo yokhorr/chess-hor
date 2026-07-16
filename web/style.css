@@ -566,6 +566,10 @@ select.field__control {
 	padding: 16px;
 }
 
+.modal-overlay[hidden] {
+	display: none;
+}
+
 .modal {
 	background: var(--panel-bg);
 	border: 1px solid var(--panel-border);
