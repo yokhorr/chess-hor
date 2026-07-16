@@ -17,4 +17,8 @@ public:
 	[[nodiscard]] PieceType getType() const override { return PieceType::knight; } // NOLINT(*-convert-member-functions-to-static)
 
 	[[nodiscard]] std::unordered_set<Cell> cellsToMove(Board const& board) const override;
+
+	[[nodiscard]] int32_t getValue() const override {
+		return 3;
+	}
 };

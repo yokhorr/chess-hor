@@ -17,4 +17,8 @@ public:
 	[[nodiscard]] std::unordered_set<Cell> cellsToMove(Board const& board) const override;
 
 	[[nodiscard]] std::unordered_set<Cell> cellsToAttack(const Board& board) const override;
+
+	[[nodiscard]] int32_t getValue() const override {
+		return 1;
+	}
 };

@@ -26,4 +26,8 @@ public:
 		{+1, -1},
 		{+1, +1}
 	};
+
+	[[nodiscard]] int32_t getValue() const override {
+		return 3;
+	}
 };

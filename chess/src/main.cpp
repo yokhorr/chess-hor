@@ -5,6 +5,7 @@
 #include "board.hpp"
 #include "botPlayer.hpp"
 #include "humanPlayer.hpp"
+#include "MinmaxedPlayer.hpp"
 #include "outcome.hpp"
 #include "player.hpp"
 
@@ -18,15 +19,13 @@ int main() {
 	board.setStart();
 	auto outcome = Outcome::ongoing;
 	auto currentColor = Color::white;
-	const std::vector<Player*> players = {new BotPlayer(Color::white), new BotPlayer(Color::black)};
+	const std::vector<Player*> players = {new MinmaxedPlayer(Color::white), new MinmaxedPlayer(Color::black)};
 
-	// std::cout << "Текущая позиция:" << std::endl;
-	// board.print();
+	std::cout << "Текущая позиция:" << std::endl;
+	board.print();
 
 	while (outcome == Outcome::ongoing) {
-		// clearScreen();
-
-		// std::cout << "Ходят " << colorName(currentColor) << std::endl;
+		std::cout << "Ходят " << colorName(currentColor) << std::endl;
 
 		Move move = players[colorIndex(currentColor)]->makeMove(board);
 		while (!board.isMoveLegal(move)) {
@@ -36,17 +35,18 @@ int main() {
 
 		board.makeMove(move);
 		outcome = board.getGameOutcome(oppositeColor(currentColor));
-		// std::cout << colorName(currentColor) << " сделали ход." << std::endl;
+		std::cout << colorName(currentColor) << " сделали ход." << std::endl;
 		currentColor = oppositeColor(currentColor);
 
-		// std::cout << "Текущая позиция:" << std::endl;
-		// board.print();
+		std::cout << "Текущая позиция:" << std::endl;
+		board.print();
+		// std::cout << board.exportToFEN() << std::endl;
 
 		// using namespace std::chrono_literals;
-		// std::this_thread::sleep_for(10ms);
+		// std::this_thread::sleep_for(1000ms);
 	}
 
-	board.print();
+	// board.print();
 	currentColor = oppositeColor(currentColor);
 	if (outcome == Outcome::mate) {
 		std::cout << "Победили " << colorName(currentColor) << ".";

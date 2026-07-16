@@ -31,6 +31,8 @@ public:
 
 	[[nodiscard]] virtual PieceType getType() const = 0;
 
+	[[nodiscard]] virtual int32_t getValue() const = 0;
+
 	virtual ~Piece() = default;
 
 	bool operator==(const Piece& other) const = default;

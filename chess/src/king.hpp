@@ -24,4 +24,8 @@ public:
 	static Cell kingsideCastleCell(Color const& color);
 
 	static Cell queensideCastleCell(Color const& color);
+
+	[[nodiscard]] int32_t getValue() const override {
+		return 0;
+	}
 };

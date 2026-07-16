@@ -4,9 +4,11 @@
 #include "cell.hpp"
 #include "config.hpp"
 #include "castleRight.hpp"
+#include "move.hpp"
+#include "piece.hpp"
+#include "pieceType.hpp"
 
 enum class Outcome;
-struct Move;
 class King;
 class Piece;
 
@@ -68,6 +70,7 @@ public:
 	[[nodiscard]] bool isMoveLegal(Move const& move) const;
 
 	[[nodiscard]] std::vector<Move> getAllLegalMoves(Color const& color) const;
+	std::vector<Move> getAllLegalAttacks(Color const& color) const;
 
 	[[nodiscard]] Outcome getGameOutcome(Color const& currentTurn) const;
 
@@ -85,6 +88,16 @@ public:
 
 	void setConsiderColorToMove(const bool consider) {
 		considerColorToMove_ = consider;
+	}
+
+	std::vector<Piece*> getPieces(Color const& color) const {
+		std::vector<Piece*> ans;
+
+		for (const auto& piece : pieces_.at(color)) {
+			ans.push_back(piece);
+		}
+
+		return ans;
 	}
 
 	void setCastleRights(const Color& color);
@@ -111,6 +124,8 @@ private:
 
 	template<typename Func>
 	std::vector<std::pair<Piece*, std::unordered_set<Cell>>> collectCells(Color const& color, Func&& func) const;
+	template <class Func>
+	std::vector<Move> getAllLegalActions(Color const& color, Func&& func, bool crutchAttack) const;
 
 	std::vector<std::vector<Piece*>> board_ = std::vector(BOARD_SIZE, std::vector<Piece*>(BOARD_SIZE));
 	std::unordered_map<Color, std::unordered_set<Piece*>> pieces_;
@@ -129,10 +144,38 @@ public:
 template <typename Func>
 std::vector<std::pair<Piece*, std::unordered_set<Cell>>> Board::collectCells(Color const& color, Func&& func) const {
 	std::vector<std::pair<Piece*, std::unordered_set<Cell>>> ans;
+
 	for (const auto& piece : pieces_.at(color)) {
 		if (auto moves = func(piece, *this); !moves.empty()) {
 			ans.emplace_back(piece, std::move(moves));
 		}
 	}
+
+	return ans;
+}
+
+// TODO: kill yourself
+
+template <typename Func>
+std::vector<Move> Board::getAllLegalActions(Color const& color, Func&& func, bool crutchAttack) const {
+	std::vector<Move> ans;
+
+	for (const auto& [piece, tos] : func(color)) {
+		for (const auto& to : tos) {
+			if (Move move = {piece->getCell(), to, PieceType::none, color}; (getPiece(move.from)->getType() == PieceType::pawn && crutchAttack && isValidCell(move.to)) || isMoveLegal(move)) {
+				if (!crutchAttack && piece->getType() == PieceType::pawn && to.y == lastRank(color)) {
+					for (
+						const auto& pieceType :
+						{PieceType::knight, PieceType::bishop, PieceType::rook, PieceType::queen}
+					) {
+						ans.emplace_back(move.from, move.to, pieceType, color);
+					}
+				} else {
+					ans.emplace_back(move.from, move.to, PieceType::none, color);
+				}
+			}
+		}
+	}
+
 	return ans;
 }

@@ -384,6 +384,18 @@ std::vector<std::pair<Piece*, std::unordered_set<Cell>>> Board::allCellsToAttack
 	});
 }
 
+std::vector<Move> Board::getAllLegalMoves(Color const& color) const {
+	return getAllLegalActions(color, [this] (Color const& _color) {
+		return allCellsToMove(_color);
+	}, false);
+}
+
+std::vector<Move> Board::getAllLegalAttacks(Color const& color) const {
+	return getAllLegalActions(color, [this] (Color const& _color) {
+		return allCellsToAttack(_color);
+	}, true);
+}
+
 bool Board::isCellAttacked
 (
 	Cell const& targetCell, std::vector<std::pair<Piece*, std::unordered_set<Cell>>> const& attackedCells
@@ -426,29 +438,6 @@ bool Board::isMoveLegal(Move const& move) const {
 	}
 
 	return false;
-}
-
-std::vector<Move> Board::getAllLegalMoves(Color const& color) const {
-	std::vector<Move> ans;
-
-	for (const auto& [piece, tos] : allCellsToMove(color)) {
-		for (const auto& to : tos) {
-			if (Move move = {piece->getCell(), to, PieceType::none, color}; isMoveLegal(move)) {
-				if (piece->getType() == PieceType::pawn && to.y == lastRank(color)) {
-					for (
-						const auto& pieceType :
-						{PieceType::knight, PieceType::bishop, PieceType::rook, PieceType::queen}
-					) {
-						ans.emplace_back(move.from, move.to, pieceType, color);
-					}
-				} else {
-					ans.emplace_back(move.from, move.to, PieceType::none, color);
-				}
-			}
-		}
-	}
-
-	return ans;
 }
 
 Outcome Board::getGameOutcome(Color const& currentTurn) const {
