@@ -1,0 +1,13 @@
+# Директории сборки CMake
+build/
+build-wasm/
+cmake-build-*/
+
+# Скомпилированный wasm-модуль (генерируется build_wasm.sh или CI и копируется сюда)
+web/engine/chess.js
+web/engine/chess.wasm
+
+# Разное
+*.o
+*.obj
+.DS_Store

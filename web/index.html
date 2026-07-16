@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="description" content="Шахматы в браузере: игра человека с человеком, с ботом или бота с ботом.">
+<title>Шахматы</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%99%9E%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="loading-overlay" class="loading-overlay">
+	<div class="loading-overlay__spinner" aria-hidden="true"></div>
+	<div class="loading-overlay__text">Загрузка шахматного движка…</div>
+</div>
+
+<div class="app">
+
+	<header class="app__header">
+		<h1 class="app__title"><span aria-hidden="true">♞</span> Шахматы</h1>
+		<div class="app__header-actions">
+			<button id="btn-sound" class="icon-btn" type="button" title="Звук">🔊</button>
+			<button id="btn-flip" class="icon-btn" type="button" title="Перевернуть доску">⇅</button>
+		</div>
+	</header>
+
+	<main class="app__main">
+
+		<section class="board-panel">
+			<div class="status-bar" id="status-bar" role="status" aria-live="polite">Загрузка…</div>
+
+			<div class="board-frame">
+				<div class="board" id="board"></div>
+			</div>
+
+			<div class="board-controls">
+				<button id="btn-first" class="ctrl-btn" type="button" title="К началу">⏮</button>
+				<button id="btn-prev" class="ctrl-btn" type="button" title="Назад">◀</button>
+				<button id="btn-undo" class="ctrl-btn ctrl-btn--wide" type="button" title="Отменить ход">Отменить ход</button>
+				<button id="btn-next" class="ctrl-btn" type="button" title="Вперёд">▶</button>
+				<button id="btn-last" class="ctrl-btn" type="button" title="К текущему моменту">⏭</button>
+			</div>
+		</section>
+
+		<aside class="side-panel">
+
+			<details class="panel-card" open>
+				<summary>Игра</summary>
+				<div class="panel-card__body">
+
+					<label class="field">
+						<span class="field__label">Режим</span>
+						<select id="select-mode" class="field__control">
+							<option value="hh">Человек — человек</option>
+							<option value="hb">Человек — бот</option>
+							<option value="bb">Бот — бот</option>
+						</select>
+					</label>
+
+					<label class="field" id="human-color-row" hidden>
+						<span class="field__label">Цвет игрока</span>
+						<select id="select-human-color" class="field__control">
+							<option value="w">Белые</option>
+							<option value="b">Чёрные</option>
+							<option value="random">Случайно</option>
+						</select>
+					</label>
+
+					<label class="field" id="bot-delay-row" hidden>
+						<span class="field__label">Задержка хода бота</span>
+						<select id="select-bot-delay" class="field__control">
+							<option value="0">Без задержки</option>
+							<option value="300">0.3 c</option>
+							<option value="600">0.6 c</option>
+							<option value="1000">1 c</option>
+							<option value="2000">2 c</option>
+							<option value="3000">3 c</option>
+							<option value="5000">5 c</option>
+						</select>
+					</label>
+
+					<div class="button-row">
+						<button id="btn-new-game" class="btn btn--primary" type="button">Новая партия</button>
+						<button id="btn-pause" class="btn" type="button" hidden>Пауза</button>
+					</div>
+
+					<div class="button-row" id="resign-row">
+						<button id="btn-resign-w" class="btn btn--danger" type="button" hidden>Сдаться за белых</button>
+						<button id="btn-resign-b" class="btn btn--danger" type="button" hidden>Сдаться за чёрных</button>
+					</div>
+
+				</div>
+			</details>
+
+			<details class="panel-card">
+				<summary>Позиция (FEN)</summary>
+				<div class="panel-card__body">
+					<label class="field">
+						<span class="field__label">Текущая позиция</span>
+						<textarea id="fen-display" class="field__control field__control--mono" rows="2" readonly></textarea>
+					</label>
+					<div class="button-row">
+						<button id="btn-copy-fen" class="btn" type="button">Копировать</button>
+					</div>
+
+					<label class="field">
+						<span class="field__label">Загрузить позицию</span>
+						<textarea id="fen-input" class="field__control field__control--mono" rows="2" placeholder="Вставьте FEN сюда…"></textarea>
+					</label>
+					<div class="button-row">
+						<button id="btn-load-fen" class="btn" type="button">Загрузить позицию</button>
+					</div>
+				</div>
+			</details>
+
+			<details class="panel-card" open>
+				<summary>Ходы</summary>
+				<div class="panel-card__body">
+					<ol class="move-list" id="move-list"></ol>
+				</div>
+			</details>
+
+		</aside>
+
+	</main>
+
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<div class="modal-overlay" id="promotion-modal" hidden>
+	<div class="modal">
+		<h3 class="modal__title">Выберите фигуру для превращения</h3>
+		<div class="promotion-options" id="promotion-options"></div>
+	</div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

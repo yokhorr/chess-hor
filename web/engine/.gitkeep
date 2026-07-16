@@ -1,0 +1,2 @@
+Сюда при сборке (build_wasm.sh или GitHub Actions) копируются сгенерированные
+Emscripten файлы chess.js и chess.wasm. Сами эти файлы не хранятся в репозитории.

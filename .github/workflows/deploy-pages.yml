@@ -1,0 +1,55 @@
+name: Сборка и деплой на GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Установка Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Конфигурация CMake (Emscripten)
+        run: emcmake cmake -S chess -B build-wasm -DCMAKE_BUILD_TYPE=Release
+
+      - name: Сборка chess_wasm
+        run: cmake --build build-wasm --target chess_wasm -j
+
+      - name: Копирование wasm-модуля в веб-приложение
+        run: |
+          mkdir -p web/engine
+          cp build-wasm/chess.js web/engine/chess.js
+          cp build-wasm/chess.wasm web/engine/chess.wasm
+
+      - name: Загрузка артефакта Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Деплой на GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
