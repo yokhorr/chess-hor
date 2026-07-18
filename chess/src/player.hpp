@@ -12,7 +12,7 @@ public:
 
 	[[nodiscard]] Color getColor() const { return color_; }
 
-	[[nodiscard]] virtual Move makeMove(Board const& board) const = 0;
+	[[nodiscard]] virtual Move makeMove(Board board) = 0;
 
 	virtual ~Player() = default;
 private:

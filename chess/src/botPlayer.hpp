@@ -14,7 +14,7 @@ public:
 		gen.seed(rd());
 	}
 
-	Move makeMove(Board const& board) const override {
+	Move makeMove(Board board) override {
 		const auto okMoves = board.getAllLegalMoves(getColor());
 
 		std::uniform_int_distribution<std::size_t> distrib(0, okMoves.size() - 1);

@@ -1,5 +1,6 @@
 #pragma once
 #include <unordered_set>
+#include <cassert>
 
 #include "cell.hpp"
 #include "config.hpp"
@@ -18,11 +19,29 @@ struct moveInvolvedPieces {
 	Piece* arrivedPiece = nullptr;
 };
 
+const std::string START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 class Board {
 public:
 	[[nodiscard]] bool operator==(const Board&) const;
 
 	Board() = default;
+
+	Board(Board const& other);
+
+	Board(Board&& other) noexcept : Board() {
+		swap(other);
+	}
+
+	Board& operator=(Board const& other);
+
+	Board& operator=(Board&& other) noexcept {
+		Board tmp(std::move(other));
+		swap(tmp);
+		return *this;
+	}
+
+	void swap(Board& other) noexcept;
 
 	explicit Board(std::string const& str);
 
@@ -35,10 +54,15 @@ public:
 	void placePiece(Piece* piece);
 
 	[[nodiscard]] Piece* getPiece(Cell const& cell) const {
+		assert(!isFreeCell(cell));
+
 		return board_[cell.y][cell.x];
 	}
 
 	void makeMove(Move const& move);
+
+	void undoMove(Move const& move);
+
 	void makeMove(Cell const& from, Cell const& to);
 
 	void setStart();
@@ -58,6 +82,7 @@ public:
 	[[nodiscard]] std::vector<std::pair<Piece*, std::unordered_set<Cell>>> allCellsToMove(Color const& color) const;
 
 	[[nodiscard]] std::vector<std::pair<Piece*, std::unordered_set<Cell>>> allCellsToAttack(Color const& color) const;
+	std::vector<Move> getAllLegalMoves() const;
 
 	[[nodiscard]] static bool isCellAttacked(
 		Cell const& targetCell, std::vector<std::pair<Piece*, std::unordered_set<Cell>>> const& attackedCells
@@ -72,7 +97,7 @@ public:
 	[[nodiscard]] std::vector<Move> getAllLegalMoves(Color const& color) const;
 	std::vector<Move> getAllLegalAttacks(Color const& color) const;
 
-	[[nodiscard]] Outcome getGameOutcome(Color const& currentTurn) const;
+	[[nodiscard]] Outcome getGameOutcome() const;
 
 	[[nodiscard]] Cell getEnPassantCell() const { return enPassantCell_; }
 
@@ -114,9 +139,10 @@ private:
 	void revokeKingsideCastleRight(Color const& color);
 	void revokeQueensideCastleRight(Color const& color);
 	void removePiece(Piece* piece);
-	void triggerParamsUpdate(Move const& move, const Piece*);
+	void triggerParamsUpdate(Move const& move, const moveInvolvedPieces& p);
 	void doRookCastleMove(Move const& move);
-	void simulateMove(moveInvolvedPieces const& p, bool backward = false);
+	void undoRookCastleMove(Move const& move);
+	void simulateMove(moveInvolvedPieces& p, bool backward = false);
 
 	[[nodiscard]] bool isOkColor(Color const& color) const {
 		return considerColorToMove_ ? color == getColorToMove() : true;
@@ -131,8 +157,22 @@ private:
 	std::unordered_map<Color, std::unordered_set<Piece*>> pieces_;
 	std::unordered_map<Color, King*> kings_;
 	Cell enPassantCell_ = NCELL;
+	Cell enPassantCellBackup_ = NCELL;
 	Color colorToMove_ = Color::white;
 	bool considerColorToMove_ = true;
+	bool lastMoveIsCastle_ = true; // not to roll back the very first move
+	std::unordered_map<Color, CastleRight> castleRightsBackup_;
+	moveInvolvedPieces moveInvolvedPiecesBackup_{};
+	int32_t halfMoveClock_ = 0;
+	int32_t halfMoveClockBackup_ = 0;
+
+	// NOTE: en passant move is tracked incorrectly, but we don't care
+	std::unordered_map<std::string, int32_t> positionsCounter_ = {
+		{START_FEN, 1}
+	};
+	bool tripleRepeat_ = false;
+
+	// NOTE: data about the last move does not define Board
 
 public:
 	std::unordered_map<Color, CastleRight> castleRights = {

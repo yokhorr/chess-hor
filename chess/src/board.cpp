@@ -37,6 +37,56 @@ bool Board::operator==(const Board& other) const {
 	return castleRights == other.castleRights
 		&& getEnPassantCell() == other.getEnPassantCell()
 		&& getColorToMove() == other.getColorToMove();
+		// NOTE: the following data is not passed through FEN, so we ignore it
+		// && halfMoveClock_ == other.halfMoveClock_
+		// && positionsCounter_ == other.positionsCounter_
+		// && tripleRepeat_ == other.tripleRepeat_;
+
+	// NOTE: data about the last move is not compared
+}
+
+Board::Board(Board const& other) : Board() {
+	for (int32_t y = 0; y < BOARD_SIZE; ++y) {
+		for (int32_t x = 0; x < BOARD_SIZE; ++x) {
+			const Cell cell(x, y);
+			if (!other.isFreeCell(cell)) {
+				const auto piece = other.getPiece(cell);
+				placePiece(createPiece(piece->getType(), piece->getColor()), cell);
+			}
+		}
+	}
+
+	enPassantCell_ = other.enPassantCell_;
+	colorToMove_ = other.colorToMove_;
+	considerColorToMove_ = other.considerColorToMove_;
+	castleRights = other.castleRights;
+	halfMoveClock_ = other.halfMoveClock_;
+	positionsCounter_ = other.positionsCounter_;
+	tripleRepeat_ = other.tripleRepeat_;
+
+	// NOTE: data about the last move is not copied;
+	// we don't plan to undoMove on just copied board.
+}
+
+Board& Board::operator=(Board const& other) {
+	if (this != &other) {
+		Board tmp(other);
+		swap(tmp);
+	}
+	return *this;
+}
+
+void Board::swap(Board& other) noexcept {
+	std::swap(enPassantCell_, other.enPassantCell_);
+	std::swap(colorToMove_, other.colorToMove_);
+	std::swap(considerColorToMove_, other.considerColorToMove_);
+	std::swap(castleRights, other.castleRights);
+	std::swap(board_, other.board_);
+	std::swap(pieces_, other.pieces_);
+	std::swap(kings_, other.kings_);
+
+	// NOTE: data about the last move is not swapped;
+	// we don't need it.
 }
 
 Board::Board(std::string const& str) : Board() {
@@ -87,7 +137,7 @@ void Board::revokeQueensideCastleRight(Color const& color) {
 	castleRights[color].queenside = false;
 }
 
-void Board::triggerParamsUpdate(Move const& move, const Piece* movedPiece) {
+void Board::triggerParamsUpdate(Move const& move, const moveInvolvedPieces& p) {
 	if (move.from == kingCell(move.color)) {
 		revokeKingsideCastleRight(move.color);
 		revokeQueensideCastleRight(move.color);
@@ -103,13 +153,19 @@ void Board::triggerParamsUpdate(Move const& move, const Piece* movedPiece) {
 
 	if
 	(
-		movedPiece->getType() == PieceType::pawn
+		p.movedPiece->getType() == PieceType::pawn
 		&& move.from.y == pawnRank(move.color)
 		&& abs(move.from.y - move.to.y) == 2
 	) {
 		enPassantCell_ = move.from.forward(move.color);
 	} else {
 		enPassantCell_ = NCELL;
+	}
+
+	if (p.movedPiece->getType() != PieceType::pawn && p.capturedPiece == nullptr) {
+		++halfMoveClock_;
+	} else {
+		halfMoveClock_ = 0;
 	}
 }
 
@@ -119,18 +175,41 @@ void Board::doRookCastleMove(Move const& move) {
 	// and just move the original one
 
 	Cell oldRookCell;
+	Cell newRookCell;
 	const auto newRook = new Rook(move.color);
 
 	if (move.to == kingsideKnightCell(move.color)) {
 		// kingside
 		oldRookCell = kingsideRookCell(move.color);
-		placePiece(newRook, kingsideBishopCell(move.color));
+		newRookCell = kingsideBishopCell(move.color);
 	} else {
 		// queenside
 		oldRookCell = queensideRookCell(move.color);
-		placePiece(newRook, queenCell(move.color));
+		newRookCell = queenCell(move.color);
 	}
 
+	placePiece(newRook, newRookCell);
+	const auto oldRook = getPiece(oldRookCell);
+	removePiece(oldRookCell);
+	delete oldRook;
+}
+
+void Board::undoRookCastleMove(Move const& move) {
+	Cell oldRookCell;
+	Cell newRookCell;
+	const auto newRook = new Rook(move.color);
+
+	if (move.to == kingsideKnightCell(move.color)) {
+		// kingside
+		oldRookCell = kingsideBishopCell(move.color);
+		newRookCell = kingsideRookCell(move.color);
+	} else {
+		// queenside
+		oldRookCell = queenCell(move.color);
+		newRookCell = queensideRookCell(move.color);
+	}
+
+	placePiece(newRook, newRookCell);
 	const auto oldRook = getPiece(oldRookCell);
 	removePiece(oldRookCell);
 	delete oldRook;
@@ -138,17 +217,53 @@ void Board::doRookCastleMove(Move const& move) {
 
 // assuming the move is legal, or we know what we do
 void Board::makeMove(Move const& move) {
-	const auto p = getMoveInvolvedPieces(move);
+	if (!lastMoveIsCastle_) {
+		delete moveInvolvedPiecesBackup_.movedPiece;
+		delete moveInvolvedPiecesBackup_.capturedPiece;
+		moveInvolvedPiecesBackup_.movedPiece = nullptr;
+		moveInvolvedPiecesBackup_.capturedPiece = nullptr;
+	}
+	auto p = getMoveInvolvedPieces(move);
+	moveInvolvedPiecesBackup_ = p;
+	enPassantCellBackup_ = enPassantCell_;
+	castleRightsBackup_ = castleRights;
+	halfMoveClockBackup_ = halfMoveClock_;
 
 	simulateMove(p);
-	triggerParamsUpdate(move, p.movedPiece);
+	triggerParamsUpdate(move, p);
 
 	if (isCastleMove(move, p.movedPiece)) {
+		lastMoveIsCastle_ = true;
 		doRookCastleMove(move);
 	} else {
-		delete p.movedPiece;
-		delete p.capturedPiece;
+		lastMoveIsCastle_ = false;
 	}
+
+	colorToMove_ = oppositeColor(colorToMove_);
+	if (++positionsCounter_[exportToFEN()] >= 3) {
+		tripleRepeat_ = true;
+	}
+}
+
+// Can only undo the very last move, otherwise UB
+void Board::undoMove(Move const& move) {
+	if (positionsCounter_[exportToFEN()]-- == 3) {
+		tripleRepeat_ = false;
+	}
+
+	auto p = moveInvolvedPiecesBackup_;
+	moveInvolvedPiecesBackup_ = {nullptr, nullptr, nullptr};
+
+	simulateMove(p, true);
+	enPassantCell_ = enPassantCellBackup_;
+	castleRights = castleRightsBackup_;
+	halfMoveClock_ = halfMoveClockBackup_;
+
+	if (isCastleMove(move, p.movedPiece)) {
+		undoRookCastleMove(move);
+	}
+
+	// nothing to delete, backward simulateMoves does the work
 
 	colorToMove_ = oppositeColor(colorToMove_);
 }
@@ -159,10 +274,11 @@ void Board::makeMove(Cell const& from, Cell const& to) {
 }
 
 // assuming the move is legal enough
-void Board::simulateMove(const moveInvolvedPieces& p, const bool backward) {
+void Board::simulateMove(moveInvolvedPieces& p, const bool backward) {
 	// duplicate code?
 	if (!backward) {
 		removePiece(p.movedPiece);
+		// ReSharper disable once CppDFAConstantConditions // absolutely not correct
 		if (p.capturedPiece) {
 			removePiece(p.capturedPiece);
 		}
@@ -175,6 +291,7 @@ void Board::simulateMove(const moveInvolvedPieces& p, const bool backward) {
 		}
 
 		delete p.arrivedPiece;
+		p.arrivedPiece = nullptr;
 	}
 }
 
@@ -205,7 +322,7 @@ void Board::setQueensideRook(const Color& color) {
 
 // assuming board is empty
 void Board::setStart() {
-	importFromFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+	importFromFEN(START_FEN);
 }
 
 void Board::print() const {
@@ -384,6 +501,10 @@ std::vector<std::pair<Piece*, std::unordered_set<Cell>>> Board::allCellsToAttack
 	});
 }
 
+std::vector<Move> Board::getAllLegalMoves() const {
+	return getAllLegalMoves(getColorToMove());
+}
+
 std::vector<Move> Board::getAllLegalMoves(Color const& color) const {
 	return getAllLegalActions(color, [this] (Color const& _color) {
 		return allCellsToMove(_color);
@@ -417,13 +538,13 @@ bool Board::isKingChecked(Color const& color) const {
 }
 
 bool Board::isMoveLegal(Move const& move) const {
-	const auto p = getMoveInvolvedPieces(move);
-
 	if
 	(
 		isOkColor(move.color) && getPiece(move.from)->getColor() == move.color && !isFreeCell(move.from)
 		&& pieceCellsToMove(move.from).contains(move.to)
 	) {
+		auto p = getMoveInvolvedPieces(move);
+
 		if (isCastleMove(move, p.movedPiece)) {
 			return true; // castling legality is already properly checked
 		}
@@ -440,13 +561,23 @@ bool Board::isMoveLegal(Move const& move) const {
 	return false;
 }
 
-Outcome Board::getGameOutcome(Color const& currentTurn) const {
-	const bool hasMoves = !getAllLegalMoves(currentTurn).empty();
-	const bool inCheck = isKingChecked(currentTurn);
+Outcome Board::getGameOutcome() const {
+	if (tripleRepeat_) {
+		return Outcome::draw;
+	}
+
+	if (halfMoveClock_ >= 50) {
+		// the fifty-move rule
+		return Outcome::draw;
+	}
 
 	if (pieces_.at(Color::white).size() == 1 && pieces_.at(Color::black).size() == 1) {
-		return Outcome::stalemate; // actually not a stalemate, but a draw
+		// just two kings left
+		return Outcome::draw;
 	}
+
+	const bool hasMoves = !getAllLegalMoves(getColorToMove()).empty();
+	const bool inCheck = isKingChecked(getColorToMove());
 
 	if (hasMoves) {
 		return Outcome::ongoing;
@@ -458,7 +589,7 @@ Outcome Board::getGameOutcome(Color const& currentTurn) const {
 	}
 
 	// no moves, no check
-	return Outcome::stalemate;
+	return Outcome::draw; // stalemate
 }
 
 moveInvolvedPieces Board::getMoveInvolvedPieces(Move const& move) const {
@@ -526,5 +657,12 @@ Board::~Board() {
 		for (const auto& piece : pieces_[color]) {
 			delete piece;
 		}
+	}
+
+	// ReSharper disable once CppDFAConstantConditions // not actually always false
+	if (!lastMoveIsCastle_) {
+		// ReSharper disable once CppDFAUnreachableCode
+		delete moveInvolvedPiecesBackup_.movedPiece;
+		delete moveInvolvedPiecesBackup_.capturedPiece;
 	}
 }

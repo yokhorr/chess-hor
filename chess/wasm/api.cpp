@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "board.hpp"
-#include "botPlayer.hpp"
+#include "MinmaxedPlayer.hpp"
 #include "cell.hpp"
 #include "color.hpp"
 #include "config.hpp"
@@ -45,7 +45,7 @@ std::string colorToStr(const Color c) {
 std::string outcomeToStr(const Outcome o) {
 	switch (o) {
 	case Outcome::mate: return "mate";
-	case Outcome::stalemate: return "stalemate";
+	case Outcome::draw: return "draw";
 	default: return "ongoing";
 	}
 }
@@ -177,7 +177,7 @@ std::string normalizeAndValidateFEN(const std::string& fenRaw) {
 }
 
 std::string buildLegalMovesJSON(const Board& board, const Color color) {
-	const auto moves = board.getAllLegalMoves(color);
+	const auto moves = board.getAllLegalMoves();
 
 	// Группируем по (from, to), собирая варианты превращения в один список.
 	std::vector<std::pair<std::pair<Cell, Cell>, std::vector<PieceType>>> grouped;
@@ -237,7 +237,7 @@ std::string getStatus(const std::string& fenRaw) {
 		const Board board(fen);
 		const Color color = board.getColorToMove();
 		const bool inCheck = board.isKingChecked(color);
-		const Outcome outcome = board.getGameOutcome(color);
+		const Outcome outcome = board.getGameOutcome();
 		const std::string movesJson = buildLegalMovesJSON(board, color);
 
 		std::ostringstream out;
@@ -299,7 +299,7 @@ std::string makeMove(
 		const std::string newFen = board.exportToFEN();
 		const Color opponent = oppositeColor(color);
 		const bool inCheck = board.isKingChecked(opponent);
-		const Outcome outcome = board.getGameOutcome(opponent);
+		const Outcome outcome = board.getGameOutcome();
 
 		std::ostringstream out;
 		out << "{\"ok\":true,"
@@ -328,9 +328,9 @@ std::string getBotMove(const std::string& fenRaw) {
 		const std::string fen = normalizeAndValidateFEN(fenRaw);
 		const Board board(fen);
 		const Color color = board.getColorToMove();
-		const BotPlayer bot(color);
+		MinmaxedPlayer bot(color);
 
-		const auto moves = board.getAllLegalMoves(color);
+		const auto moves = board.getAllLegalMoves();
 		if (moves.empty()) {
 			return errorJSON("Нет доступных ходов");
 		}

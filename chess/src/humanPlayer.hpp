@@ -8,7 +8,7 @@ class HumanPlayer final : public Player {
 public:
 	explicit HumanPlayer(const Color color) : Player(color) {}
 
-	[[nodiscard]] Move makeMove(Board const& board) const override {
+	[[nodiscard]] Move makeMove(Board board) override {
 		std::cout << "Введите ход в формате: `e2 e4 ?`" << std::endl;
 		char x1c, x2c, y1c, y2c, pc;
 		std::cin >> x1c >> y1c >> x2c >> y2c >> pc;

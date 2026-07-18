@@ -2,7 +2,7 @@
 
 enum class Outcome {
 	mate,
-	stalemate,
+	draw,
 	ongoing
 	// no draws and resignation so far
 };

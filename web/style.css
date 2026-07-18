@@ -225,6 +225,7 @@ button, select, textarea {
 	background: var(--dot-move);
 	pointer-events: none;
 	z-index: 2;
+	transition: width 0.12s ease, height 0.12s ease;
 }
 
 .square.sq--legal-capture::before {
@@ -235,6 +236,35 @@ button, select, textarea {
 	box-shadow: inset 0 0 0 4px var(--ring-capture);
 	pointer-events: none;
 	z-index: 2;
+	transition: inset 0.12s ease;
+}
+
+.square.sq--legal-move,
+.square.sq--legal-capture,
+.square.sq--selectable {
+	cursor: pointer;
+}
+
+/* filter: brightness масштабирует уже имеющийся цвет клетки, а не накладывает
+   поверх фиксированный полупрозрачный цвет - поэтому эффект одинаково заметен
+   и на светлых, и на тёмных клетках (полупрозрачный белый почти не виден на
+   светлых клетках, а тёмный - на тёмных). */
+.square.sq--selectable:hover {
+	filter: brightness(1.16);
+}
+
+.square.sq--legal-move:hover,
+.square.sq--legal-capture:hover {
+	filter: brightness(1.28);
+}
+
+.square.sq--legal-move:hover::before {
+	width: 36%;
+	height: 36%;
+}
+
+.square.sq--legal-capture:hover::before {
+	inset: 3%;
 }
 
 .coord {
@@ -266,6 +296,8 @@ button, select, textarea {
 
 .piece {
 	position: absolute;
+	left: 0;
+	top: 0;
 	width: 12.5%;
 	height: 12.5%;
 	display: flex;
@@ -274,9 +306,10 @@ button, select, textarea {
 	font-size: clamp(22px, 6.6vw, 46px);
 	line-height: 1;
 	cursor: pointer;
-	transition: left 0.18s ease, top 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
+	pointer-events: none;
+	transition: transform 0.18s ease, opacity 0.18s ease;
 	z-index: 4;
-	will-change: left, top;
+	will-change: transform;
 }
 
 .piece--w {
@@ -297,7 +330,6 @@ button, select, textarea {
 
 .piece--captured {
 	opacity: 0;
-	transform: scale(0.4);
 }
 
 /* ---------- board controls ---------- */
@@ -417,6 +449,10 @@ button, select, textarea {
 	flex-direction: column;
 	gap: 5px;
 	font-size: 0.85rem;
+}
+
+.field[hidden] {
+	display: none;
 }
 
 .field__label {
@@ -585,6 +621,37 @@ select.field__control {
 	margin: 0 0 14px;
 	font-size: 1rem;
 	font-weight: 600;
+}
+
+.modal--about {
+	max-width: 440px;
+	text-align: left;
+}
+
+.modal__body {
+	font-size: 0.88rem;
+	line-height: 1.55;
+	color: var(--text-dim);
+	max-height: 55vh;
+	overflow-y: auto;
+	margin-bottom: 16px;
+}
+
+.modal__body p {
+	margin: 0 0 10px;
+}
+
+.modal__body ul {
+	margin: 0 0 10px;
+	padding-left: 20px;
+}
+
+.modal__body li {
+	margin-bottom: 5px;
+}
+
+.modal--about .btn {
+	width: 100%;
 }
 
 .promotion-options {

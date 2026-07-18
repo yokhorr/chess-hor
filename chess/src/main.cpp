@@ -17,8 +17,9 @@ void clearScreen() {
 int main() {
 	Board board;
 	board.setStart();
+
 	auto outcome = Outcome::ongoing;
-	auto currentColor = Color::white;
+	auto currentColor = board.getColorToMove();
 	const std::vector<Player*> players = {new MinmaxedPlayer(Color::white), new MinmaxedPlayer(Color::black)};
 
 	std::cout << "Текущая позиция:" << std::endl;
@@ -34,13 +35,13 @@ int main() {
 		}
 
 		board.makeMove(move);
-		outcome = board.getGameOutcome(oppositeColor(currentColor));
+		outcome = board.getGameOutcome();
 		std::cout << colorName(currentColor) << " сделали ход." << std::endl;
 		currentColor = oppositeColor(currentColor);
 
 		std::cout << "Текущая позиция:" << std::endl;
 		board.print();
-		// std::cout << board.exportToFEN() << std::endl;
+		std::cout << board.exportToFEN() << std::endl;
 
 		// using namespace std::chrono_literals;
 		// std::this_thread::sleep_for(1000ms);
@@ -50,11 +51,16 @@ int main() {
 	currentColor = oppositeColor(currentColor);
 	if (outcome == Outcome::mate) {
 		std::cout << "Победили " << colorName(currentColor) << ".";
-	} else if (outcome == Outcome::stalemate) {
+	} else if (outcome == Outcome::draw) {
 		std::cout << "Ничья.";
 	}
 
 	std::cout << std::endl;
 
 	std::cout << board.exportToFEN() << std::endl;
+	std::cout << "Размер кэша белых: " << static_cast<MinmaxedPlayer*>(players[0])->getCacheSize() << std::endl;
+	std::cout << "Размер кэша чёрных: " << static_cast<MinmaxedPlayer*>(players[1])->getCacheSize() << std::endl;
 }
+
+// Размер кэша белых: 739'998
+// Размер кэша чёрных: 718'136

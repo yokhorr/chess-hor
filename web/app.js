@@ -70,7 +70,8 @@ const state = {
 	selectedSquare: null,
 	legalMovesForSelected: [],
 	pendingPromotion: null,
-	botTimer: null,
+	botThinking: false,
+	botError: null,
 };
 
 let Module = null;
@@ -188,7 +189,7 @@ function playSoundsForMove(moveResult, status) {
 		playSound("mate");
 		return;
 	}
-	if (status.outcome === "stalemate") {
+	if (status.outcome === "draw") {
 		playSound("draw");
 		return;
 	}
@@ -256,7 +257,7 @@ function visualToXY(vr, vc) {
 	return { x: 7 - vc, y: vr };
 }
 
-function squareToPercentPos(square) {
+function squareToGridPos(square) {
 	const { x, y } = squareToXY(square);
 	let vr, vc;
 	if (state.orientation === "w") {
@@ -266,7 +267,7 @@ function squareToPercentPos(square) {
 		vr = y;
 		vc = 7 - x;
 	}
-	return { leftPct: vc * 12.5, topPct: vr * 12.5 };
+	return { vr, vc };
 }
 
 function buildSquaresGrid() {
@@ -307,9 +308,13 @@ function buildSquaresGrid() {
 }
 
 function positionPieceElement(el, square) {
-	const { leftPct, topPct } = squareToPercentPos(square);
-	el.style.left = leftPct + "%";
-	el.style.top = topPct + "%";
+	// translate() в процентах считается от размера самого элемента (12.5% доски =
+	// одна клетка), поэтому смещение на N "клеток" - это N*100%. transform (в
+	// отличие от left/top) анимируется на потоке композитора и продолжает
+	// проигрываться, даже если основной поток затем надолго заблокируется
+	// (например, долгим синхронным расчётом хода бота).
+	const { vr, vc } = squareToGridPos(square);
+	el.style.transform = `translate(${vc * 100}%, ${vr * 100}%)`;
 }
 
 function createPieceElement(type, color, square) {
@@ -347,6 +352,13 @@ function movePieceElement(fromSq, toSq) {
 	pieceElements.delete(fromSq);
 	pieceElements.set(toSq, el);
 	el.dataset.square = toSq;
+	// Принудительный синхронный reflow перед изменением transform: гарантирует,
+	// что браузер зафиксировал текущее положение фигуры как "исходное" для
+	// перехода, независимо от того, из какого контекста выполнения (в т.ч. из
+	// глубоко вложенной асинхронной цепочки) был вызван этот код - без этого
+	// переход в некоторых сценариях может быть пропущен, и фигура появится сразу
+	// в новом положении без анимации.
+	void el.offsetWidth;
 	positionPieceElement(el, toSq);
 }
 
@@ -355,6 +367,13 @@ function removePieceElementAnimated(sq) {
 	if (!el) return;
 	pieceElements.delete(sq);
 	el.classList.add("piece--captured");
+	void el.offsetWidth;
+	// transform уже используется для позиционирования (translate), а CSS-свойство
+	// transform не может одновременно содержать значение из класса и инлайн-стиля -
+	// поэтому масштаб для анимации исчезновения добавляем к уже установленному
+	// translate вручную, а не через отдельный класс с transform:scale().
+	el.style.transform = el.style.transform + " scale(0.4)";
+	el.style.opacity = "0";
 	setTimeout(() => el.remove(), 220);
 }
 
@@ -409,6 +428,7 @@ function updateHighlights() {
 			"sq--last-from",
 			"sq--last-to",
 			"sq--selected",
+			"sq--selectable",
 			"sq--legal-move",
 			"sq--legal-capture",
 			"sq--check",
@@ -420,6 +440,15 @@ function updateHighlights() {
 	if (ply.lastMove) {
 		squaresMap.get(ply.lastMove.from)?.classList.add("sq--last-from");
 		squaresMap.get(ply.lastMove.to)?.classList.add("sq--last-to");
+	}
+
+	if (isHumanTurnToMove()) {
+		const seen = new Set();
+		for (const mv of state.currentStatus.legalMoves) {
+			if (seen.has(mv.from)) continue;
+			seen.add(mv.from);
+			squaresMap.get(mv.from)?.classList.add("sq--selectable");
+		}
 	}
 
 	if (state.selectedSquare) {
@@ -460,6 +489,7 @@ function render({ animateMoveResult = null } = {}) {
 	updateMoveList();
 	updateControlsEnabled();
 	updateFenDisplay(fen);
+	syncSettingsUI();
 }
 
 // =====================================================================
@@ -478,11 +508,18 @@ function updateStatusBar() {
 		if (outcome === "mate") {
 			const winner = colorToMove === "w" ? "чёрные" : "белые";
 			msg = `Мат! Победили ${winner}.`;
-		} else if (outcome === "stalemate") {
-			msg = "Ничья (пат).";
+		} else if (outcome === "draw") {
+			msg = "Ничья.";
 		} else {
 			msg = (colorToMove === "w" ? "Ходят белые" : "Ходят чёрные") + (inCheck ? " — Шах!" : "") + ".";
 		}
+	}
+
+	if (viewingLive && state.botThinking) {
+		msg += " Бот думает…";
+	}
+	if (viewingLive && state.botError) {
+		msg += ` ⚠ ${state.botError}`;
 	}
 
 	if (!viewingLive) {
@@ -541,12 +578,14 @@ function syncSettingsUI() {
 	document.getElementById("bot-delay-row").hidden = !hasBot;
 	document.getElementById("human-color-row").hidden = state.mode !== "hb";
 
+	const liveGameEnded = state.gameOver || !!state.resignedBy;
+
 	const pauseBtn = document.getElementById("btn-pause");
-	pauseBtn.hidden = !hasBot;
+	pauseBtn.hidden = !hasBot || liveGameEnded;
 	pauseBtn.textContent = state.autoplayPaused ? "Продолжить" : "Пауза";
 
-	document.getElementById("btn-resign-w").hidden = state.players.w !== "human";
-	document.getElementById("btn-resign-b").hidden = state.players.b !== "human";
+	document.getElementById("btn-resign-w").hidden = state.players.w !== "human" || liveGameEnded;
+	document.getElementById("btn-resign-b").hidden = state.players.b !== "human" || liveGameEnded;
 
 	updateSoundIcon();
 }
@@ -571,6 +610,41 @@ function showToast(message) {
 			el.hidden = true;
 		}, 260);
 	}, 2200);
+}
+
+async function copyTextToClipboard(text, successMessage) {
+	try {
+		await navigator.clipboard.writeText(text);
+		showToast(successMessage);
+		return;
+	} catch (e) {
+		/* переходим к запасному варианту через временный textarea */
+	}
+	try {
+		const ta = document.createElement("textarea");
+		ta.value = text;
+		ta.style.position = "fixed";
+		ta.style.opacity = "0";
+		document.body.appendChild(ta);
+		ta.select();
+		document.execCommand("copy");
+		ta.remove();
+		showToast(successMessage);
+	} catch (e) {
+		showToast("Не удалось скопировать в буфер обмена");
+	}
+}
+
+// Возвращает ходы партии в том же виде, в котором они хранятся - просто
+// последовательность пар клеток "откуда-куда" (плюс буква превращения, если
+// был выбор фигуры), без номеров ходов и без шахматной нотации.
+function buildMovesText() {
+	const parts = [];
+	for (let i = 1; i < state.history.length; i++) {
+		const mv = state.history[i].lastMove;
+		parts.push(mv.from + mv.to + (mv.promotion || ""));
+	}
+	return parts.join(" ");
 }
 
 // =====================================================================
@@ -670,15 +744,25 @@ function closePromotionDialog() {
 // Выполнение хода, бот, навигация по истории
 // =====================================================================
 
+let botScheduleToken = 0;
+
 function clearBotTimer() {
-	if (state.botTimer) {
-		clearTimeout(state.botTimer);
-		state.botTimer = null;
-	}
+	// Аннулирует любое запланированное (но ещё не выполненное) ожидание хода бота.
+	botScheduleToken++;
+	state.botThinking = false;
 }
 
-function scheduleBotMoveIfNeeded() {
-	clearBotTimer();
+function nextFrame() {
+	return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+function wait(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function scheduleBotMoveIfNeeded() {
+	const myToken = ++botScheduleToken;
+
 	if (state.autoplayPaused) return;
 	if (state.currentPly !== state.history.length - 1) return;
 	if (!state.currentStatus) return;
@@ -686,16 +770,53 @@ function scheduleBotMoveIfNeeded() {
 	if (state.resignedBy) return;
 	if (state.players[state.currentStatus.colorToMove] !== "bot") return;
 
-	state.botTimer = setTimeout(() => {
-		state.botTimer = null;
-		performBotMove();
-	}, state.botDelayMs);
+	// Ход, который мы только что отрисовали (анимация, подсветка), иначе может не
+	// успеть попасть на экран: если следующим шагом сразу выполнить потенциально
+	// долгий синхронный расчёт хода бота, браузер не получит возможности отрисовать
+	// кадр до того, как основной поток окажется занят. Два requestAnimationFrame
+	// подряд гарантируют, что как минимум один кадр с текущим состоянием уже отрисован.
+	await nextFrame();
+	await nextFrame();
+	if (myToken !== botScheduleToken) return;
+
+	if (state.botDelayMs > 0) {
+		await wait(state.botDelayMs);
+		if (myToken !== botScheduleToken) return;
+	}
+
+	// Отдельно отрисовываем индикатор "бот думает" и снова ждём тик обычным
+	// макротаском (не внутри requestAnimationFrame), чтобы индикатор успел
+	// отобразиться, а последующий (возможно долгий) вызов бота и применение его
+	// хода выполнялись в обычном контексте выполнения - как обработчик клика,
+	// а не как часть колбэка requestAnimationFrame.
+	state.botThinking = true;
+	updateStatusBar();
+	await wait(0);
+	if (myToken !== botScheduleToken) return;
+
+	performBotMove();
 }
 
 function performBotMove() {
 	const fen = state.history[state.currentPly].fen;
-	const resp = callBotMove(fen);
-	if (!resp.ok) return;
+	let resp;
+	try {
+		resp = callBotMove(fen);
+	} finally {
+		state.botThinking = false;
+	}
+
+	if (!resp.ok) {
+		// Не оставляем партию молча "зависшей": явно останавливаем автоигру и
+		// показываем причину, чтобы это не выглядело как зависание интерфейса.
+		state.autoplayPaused = true;
+		state.botError = resp.error || "Бот не смог сделать ход.";
+		syncSettingsUI();
+		updateStatusBar();
+		showToast(state.botError);
+		return;
+	}
+
 	applyMove(resp.from, resp.to, resp.promotion);
 }
 
@@ -711,6 +832,7 @@ function applyMove(from, to, promotion) {
 	state.history.push({ fen: result.fen, lastMove: result });
 	state.currentPly = state.history.length - 1;
 	state.resignedBy = null;
+	state.botError = null;
 
 	state.currentStatus = callStatus(result.fen);
 	state.gameOver = state.currentStatus.outcome !== "ongoing";
@@ -724,6 +846,7 @@ function applyMove(from, to, promotion) {
 
 function goToPly(n) {
 	clearBotTimer();
+	state.botError = null;
 	state.currentPly = clamp(n, 0, state.history.length - 1);
 	const fen = state.history[state.currentPly].fen;
 	state.currentStatus = callStatus(fen);
@@ -734,6 +857,7 @@ function goToPly(n) {
 
 function undo() {
 	clearBotTimer();
+	state.botError = null;
 
 	if (state.resignedBy) {
 		state.resignedBy = null;
@@ -772,6 +896,7 @@ function undo() {
 function resign(color) {
 	if (state.gameOver || state.resignedBy) return;
 	clearBotTimer();
+	state.botError = null;
 	state.resignedBy = color;
 	state.gameOver = true;
 	clearSelection();
@@ -797,6 +922,7 @@ function computePlayersForNewGame() {
 
 function newGame() {
 	clearBotTimer();
+	state.botError = null;
 	state.players = computePlayersForNewGame();
 
 	const startFen = Module.getStartFEN();
@@ -829,6 +955,7 @@ function loadFEN(fenRaw) {
 	}
 
 	clearBotTimer();
+	state.botError = null;
 	state.history = [{ fen: trimmed, lastMove: null }];
 	state.currentPly = 0;
 	state.gameOver = status.outcome !== "ongoing";
@@ -850,7 +977,11 @@ function toggleOrientation() {
 
 function togglePause() {
 	state.autoplayPaused = !state.autoplayPaused;
+	if (!state.autoplayPaused) {
+		state.botError = null;
+	}
 	syncSettingsUI();
+	updateStatusBar();
 	persistState();
 	scheduleBotMoveIfNeeded();
 }
@@ -896,21 +1027,17 @@ function wireUI() {
 		scheduleBotMoveIfNeeded();
 	});
 
-	document.getElementById("btn-copy-fen").addEventListener("click", async () => {
-		const text = document.getElementById("fen-display").value;
-		try {
-			await navigator.clipboard.writeText(text);
-			showToast("FEN скопирован в буфер обмена");
-		} catch (e) {
-			const ta = document.getElementById("fen-display");
-			ta.select();
-			try {
-				document.execCommand("copy");
-				showToast("FEN скопирован в буфер обмена");
-			} catch (e2) {
-				showToast("Не удалось скопировать FEN");
-			}
+	document.getElementById("btn-copy-fen").addEventListener("click", () => {
+		copyTextToClipboard(document.getElementById("fen-display").value, "FEN скопирован в буфер обмена");
+	});
+
+	document.getElementById("btn-copy-moves").addEventListener("click", () => {
+		const text = buildMovesText();
+		if (!text) {
+			showToast("Пока нет ни одного хода");
+			return;
 		}
+		copyTextToClipboard(text, "Ходы скопированы в буфер обмена");
 	});
 
 	document.getElementById("btn-load-fen").addEventListener("click", () => {
@@ -921,6 +1048,18 @@ function wireUI() {
 		if (e.target.id === "promotion-modal") {
 			// клик по подложке не должен молча отменять выбор превращения без явного действия -
 			// оставляем модальное окно открытым, чтобы игрок обязательно выбрал фигуру.
+		}
+	});
+
+	document.getElementById("btn-about").addEventListener("click", () => {
+		document.getElementById("about-modal").hidden = false;
+	});
+	document.getElementById("btn-about-close").addEventListener("click", () => {
+		document.getElementById("about-modal").hidden = true;
+	});
+	document.getElementById("about-modal").addEventListener("click", (e) => {
+		if (e.target.id === "about-modal") {
+			document.getElementById("about-modal").hidden = true;
 		}
 	});
 }

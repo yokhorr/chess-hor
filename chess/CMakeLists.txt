@@ -10,6 +10,7 @@ add_library(chess_lib STATIC
         src/pawn.cpp
         src/piece.cpp
         src/knight.cpp
+        src/MinmaxedPlayer.cpp
 )
 
 target_include_directories(chess_lib PUBLIC src)

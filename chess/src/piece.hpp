@@ -13,6 +13,8 @@ public:
 	explicit Piece(const Color color) : color_(color) {
 	}
 
+	// TODO: copy constructor, move factory here
+
 	[[nodiscard]] Color getColor() const { return color_; }
 
 	[[nodiscard]] Cell getCell() const { return cell_; }

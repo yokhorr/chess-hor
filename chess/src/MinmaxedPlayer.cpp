@@ -1,5 +1,7 @@
 #include "MinmaxedPlayer.hpp"
 
+#include <cassert>
+#include <iostream>
 #include <ranges>
 
 #include "board.hpp"
@@ -8,17 +10,34 @@
 #include "move.hpp"
 
 constexpr int32_t INF = std::numeric_limits<int32_t>::max();
+constexpr int32_t WIN = INF - 1;
 
-Move MinmaxedPlayer::makeMove(Board const& board) const {
+Move MinmaxedPlayer::makeMove(Board board) {
 	int32_t minMaxValue = INF;
 	Move bestMove;
 
-	for (const auto& move : board.getAllLegalMoves(getColor())) {
-		auto boardCopy = Board(board.exportToFEN());
-		boardCopy.makeMove(move);
-		if (const int32_t maxEval = evaluatePosition(boardCopy, oppositeColor(getColor()), 1); maxEval < minMaxValue) {
-			minMaxValue = maxEval;
-			bestMove = move;
+	if (const auto currFen = board.exportToFEN(); !table_.contains(currFen)) {
+		for (const auto& move : board.getAllLegalMoves(getColor())) {
+			board.makeMove(move);
+			table_[currFen].emplace_back(board.exportToFEN(), move);
+			if (
+				const int32_t maxEval = evaluatePosition(board, oppositeColor(getColor()), 1);
+				maxEval < minMaxValue
+			) {
+				minMaxValue = maxEval;
+				bestMove = move;
+			}
+			board.undoMove(move);
+		}
+	} else {
+		for (const auto& [fen, move] : table_.at(currFen)) {
+			if (
+				const int32_t maxEval = evaluatePosition(Board(fen), oppositeColor(getColor()), 1);
+				maxEval < minMaxValue
+			) {
+				minMaxValue = maxEval;
+				bestMove = move;
+			}
 		}
 	}
 
@@ -35,44 +54,69 @@ int32_t MinmaxedPlayer::countMaterialValue(Board const& board, Color const& colo
 	return ans;
 }
 
-int32_t MinmaxedPlayer::countAttackValue(Board const& board, Color const& color) {
-	int32_t ans = 0;
-
-	auto pairs = board.allCellsToAttack(color);
-	for (const auto& cells : pairs | std::views::values) {
-		ans += cells.size();
-	}
-
-	return ans;
+int32_t MinmaxedPlayer::countMobilityValue(Board const& board, Color const& color) {
+	return static_cast<int32_t>(board.getAllLegalMoves(color).size());
 }
 
 int32_t MinmaxedPlayer::heuristicValue(Board const& board, Color const& color) {
-	if (board.getGameOutcome(color) == Outcome::mate) {
-		return -INF;
+	const auto fen = board.exportToFEN();
+	if (positionValuesCache_.contains(fen)) {
+		// std::cout << positionValuesCache_.size() << std::endl;
+		return positionValuesCache_.at(fen);
 	}
 
-	if (board.getGameOutcome(color) == Outcome::stalemate) {
-		if (countMaterialValue(board, color) > countMaterialValue(board, oppositeColor(color))) {
-			return -INF;
+	const auto gameOutcome = board.getGameOutcome();
+
+	if (gameOutcome == Outcome::mate) {
+		positionValuesCache_[fen] = -WIN;
+		return -WIN;
+	}
+
+	if (gameOutcome == Outcome::draw) {
+		// NOTE: aggressive: >=, non-aggressive: >
+		if (countMaterialValue(board, color) >= countMaterialValue(board, oppositeColor(color))) {
+			positionValuesCache_[fen] = -WIN;
+			return -WIN;
 		}
-		return INF;
+		positionValuesCache_[fen] = WIN;
+		return WIN;
 	}
 
-	return 1000 * (countMaterialValue(board, color) - countMaterialValue(board, oppositeColor(color))); // +
-		//(countAttackValue(board, color) - countAttackValue(board, oppositeColor(color)));
+	const int32_t materialValue = 1000 *
+		(countMaterialValue(board, color) - countMaterialValue(board, oppositeColor(color)));
+	const int32_t mobilityValue = countMobilityValue(board, color) - countMobilityValue(board, oppositeColor(color));
+	positionValuesCache_[fen] = materialValue + mobilityValue;
+	return materialValue + mobilityValue;
 }
 
-int32_t MinmaxedPlayer::evaluatePosition(const Board& board, const Color& color, const int32_t depth) {
-	if (depth == maxDepth) {
+int32_t MinmaxedPlayer::evaluatePosition(Board board, const Color& color, const int32_t depth) {
+	if (depth == maxDepth || board.getGameOutcome() != Outcome::ongoing) {
 		return heuristicValue(board, color);
 	}
 
 	int32_t minMaxValue = INF;
 
-	for (const auto& move : board.getAllLegalMoves(color)) {
-		auto boardCopy = Board(board.exportToFEN());
-		boardCopy.makeMove(move);
-		minMaxValue = std::min(minMaxValue, evaluatePosition(boardCopy, oppositeColor(color), depth + 1));
+	if (const auto currFen = board.exportToFEN(); !table_.contains(currFen)) {
+		for (const auto& move : board.getAllLegalMoves(color)) {
+			board.makeMove(move);
+			table_[currFen].emplace_back(board.exportToFEN(), move);
+			if (
+				const int32_t maxEval = evaluatePosition(board, oppositeColor(color), depth + 1);
+				maxEval < minMaxValue
+			) {
+				minMaxValue = maxEval;
+			}
+			board.undoMove(move);
+		}
+	} else {
+		for (const auto& fen : table_.at(currFen) | std::views::keys) {
+			if (
+				const int32_t maxEval = evaluatePosition(Board(fen), oppositeColor(color), depth + 1);
+				maxEval < minMaxValue
+			) {
+				minMaxValue = maxEval;
+			}
+		}
 	}
 
 	return -minMaxValue;

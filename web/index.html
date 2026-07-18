@@ -20,6 +20,7 @@
 	<header class="app__header">
 		<h1 class="app__title"><span aria-hidden="true">♞</span> Шахматы</h1>
 		<div class="app__header-actions">
+			<button id="btn-about" class="icon-btn" type="button" title="О проекте">ⓘ</button>
 			<button id="btn-sound" class="icon-btn" type="button" title="Звук">🔊</button>
 			<button id="btn-flip" class="icon-btn" type="button" title="Перевернуть доску">⇅</button>
 		</div>
@@ -118,6 +119,9 @@
 				<summary>Ходы</summary>
 				<div class="panel-card__body">
 					<ol class="move-list" id="move-list"></ol>
+					<div class="button-row">
+						<button id="btn-copy-moves" class="btn" type="button">Скопировать ходы</button>
+					</div>
 				</div>
 			</details>
 
@@ -133,6 +137,32 @@
 	<div class="modal">
 		<h3 class="modal__title">Выберите фигуру для превращения</h3>
 		<div class="promotion-options" id="promotion-options"></div>
+	</div>
+</div>
+
+<div class="modal-overlay" id="about-modal" hidden>
+	<div class="modal modal--about">
+		<h3 class="modal__title">О проекте</h3>
+		<div class="modal__body">
+			<p>
+				Шахматы, полностью работающие в браузере. Правила ходов, определение
+				шаха и мата, а также ход бота вычисляет один и тот же шахматный
+				движок на C++, скомпилированный в WebAssembly — интерфейс не
+				содержит собственной шахматной логики и не использует сторонние
+				шахматные библиотеки.
+			</p>
+			<ul>
+				<li>Человек против человека, человек против бота или бот против бота.</li>
+				<li>Отмена хода и навигация по истории партии.</li>
+				<li>Импорт и экспорт позиции в формате FEN.</li>
+				<li>Подсветка последнего хода, доступных ходов, шаха и мата.</li>
+			</ul>
+			<p>
+				Троекратное повторение, правило 50 ходов и недостаточность
+				материала движком не отслеживаются.
+			</p>
+		</div>
+		<button id="btn-about-close" class="btn btn--primary" type="button">Понятно</button>
 	</div>
 </div>
 
