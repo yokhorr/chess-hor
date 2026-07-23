@@ -25,5 +25,5 @@ public:
 
 	static int32_t evaluatePosition(Board board, const Color& color, int32_t depth, int32_t alpha, int32_t beta);
 
-	inline static int32_t maxDepth = 4; // TODO: bigNumber which then get divided by numberOfMoves?
+	inline static int32_t maxDepth = 3; // TODO: bigNumber which then get divided by numberOfMoves?
 };
