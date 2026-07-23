@@ -1,4 +1,4 @@
-[yokhorr.github.io/chess-hor](yokhorr.github.io/chess-hor)
+[yokhorr.github.io/chess-hor](https://yokhorr.github.io/chess-hor)
 
 Шахматный движок на C++, завёрнутый в веб-оболочку.
 
